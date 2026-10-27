@@ -43,7 +43,7 @@ async def get_twiml(request: Request, reservation_id: int):
 
 
 @router.websocket("/stream/{reservation_id}")
-async def websocket_endpoint(websocket: WebSocket, reservation_id: int, db: Session = Depends(crud.get_db)):
+async def websocket_endpoint(websocket: WebSocket, reservation_id: int, db: Session = Depends(get_db)):
     """
     Handles the bidirectional audio stream between Twilio and OpenAI Realtime API.
     """

@@ -56,21 +56,28 @@ docker-compose up --build -d
 If you prefer to run the components separately for development:
 
 ### Backend
-```bash
+# Navigate to the backend folder
 cd backend
-python -m venv venv
-source venv/Scripts/activate  # On Windows
-pip install -r requirements.txt
-alembic upgrade head
+
+# Activate the Python virtual environment
+.\venv\Scripts\activate
+
+# Create your .env file (if you haven't already)
+Copy-Item .env.example .env
+
+# Run the backend server
 uvicorn main:app --reload
 ```
 
 ### Frontend
-```bash
+# Navigate to the frontend folder
 cd frontend
+
+# Install the Node.js dependencies (only needed the first time)
 npm install
+
+# Start the development server
 npm run dev
-```
 
 ---
 

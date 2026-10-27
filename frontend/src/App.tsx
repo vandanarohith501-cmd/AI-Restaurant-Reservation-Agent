@@ -18,6 +18,7 @@ function App() {
   ])
   const [input, setInput] = useState('')
   const [isRecording, setIsRecording] = useState(false)
+  const [bookingContext, setBookingContext] = useState<any>({})
   
   const chatEndRef = useRef<HTMLDivElement>(null)
 
@@ -26,9 +27,29 @@ function App() {
   }, [messages])
 
   const handleLoginSuccess = (credentialResponse: any) => {
-    // In a real app, send credentialResponse to FastAPI backend
     console.log(credentialResponse)
-    setUser({ name: "Demo User", email: "demo@gmail.com" })
+    if (credentialResponse?.credential) {
+      try {
+        const base64Url = credentialResponse.credential.split('.')[1]
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        )
+        const payload = JSON.parse(jsonPayload)
+        setUser({
+          name: payload.name || "Google User",
+          email: payload.email || "user@gmail.com"
+        })
+      } catch (err) {
+        console.error("Failed to decode token", err)
+        setUser({ name: "Google User", email: "user@gmail.com" })
+      }
+    } else {
+      setUser({ name: "Demo User", email: "demo@gmail.com" })
+    }
     setIsAuthenticated(true)
   }
 
@@ -38,21 +59,47 @@ function App() {
     // Add user message to UI
     const newMessages: Message[] = [...messages, { role: 'user', content: input }]
     setMessages(newMessages)
+    const userText = input
     setInput('')
     
     try {
-      // Call our FastAPI LangGraph endpoint
+      // Call our FastAPI LangGraph endpoint with accumulated context
       const response = await axios.post('http://localhost:8000/api/agent/chat', {
-        user_input: input
+        user_input: userText,
+        current_state: bookingContext
       })
       
       let aiResponse = response.data.general_response || "I am processing that for you."
       
       if (response.data.intent === 'book_table') {
         if (response.data.is_ready_to_call) {
-          aiResponse = `Perfect. I have all the details. I will now call ${response.data.restaurant_name} to secure your table for ${response.data.guest_count} guests on ${response.data.date} at ${response.data.time}.`
-        } else if (response.data.errors.length > 0) {
-          aiResponse = response.data.errors[0] // e.g., "Missing time."
+          const restName = response.data.restaurant_name || "the restaurant"
+          const guests = response.data.guest_count || 2
+          const date = response.data.date || "tomorrow"
+          const time = response.data.time || "the scheduled time"
+          
+          if (!response.data.call_initiated && response.data.call_status_message) {
+            aiResponse = `Perfect, I have all the details for ${restName} (${guests} guests on ${date} at ${time}). However, the call cannot be initiated because the Voice Call API is not working or not configured.`
+          } else {
+            aiResponse = `Perfect. I have all the details. I will now call ${restName} to secure your table for ${guests} guests on ${date} at ${time}.`
+          }
+          // Clear booking context on completion
+          setBookingContext({})
+        } else {
+          // Accumulate updated booking context
+          setBookingContext((prev: any) => ({
+            ...prev,
+            restaurant_name: response.data.restaurant_name || prev.restaurant_name,
+            date: response.data.date || prev.date,
+            time: response.data.time || prev.time,
+            guest_count: response.data.guest_count || prev.guest_count,
+            place_id: response.data.restaurant_details?.place_id || prev.place_id,
+            restaurant_details: response.data.restaurant_details || prev.restaurant_details
+          }))
+          
+          if (response.data.errors.length > 0) {
+            aiResponse = response.data.errors[0]
+          }
         }
       }
       
